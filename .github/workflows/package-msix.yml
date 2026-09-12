@@ -49,6 +49,7 @@ jobs:
             Artifacts/**/*.msixbundle
             Artifacts/**/*.cer
             Artifacts/**/Add-AppDevPackage.ps1
+            Artifacts/**/Add-AppDevPackage.resources/**
             Artifacts/**/Dependencies/**
           if-no-files-found: error
           retention-days: 14
