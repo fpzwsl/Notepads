@@ -150,6 +150,8 @@ namespace Notepads.Controls.TextEditor
             SizeChanged += OnSizeChanged;
             FontSizeChanged += OnFontSizeChanged;
 
+            InitializeSyntaxHighlighting();
+
             // Init shortcuts
             _keyboardCommandHandler = GetKeyboardCommandHandler();
             _mouseCommandHandler = GetMouseCommandHandler();
@@ -232,6 +234,8 @@ namespace Notepads.Controls.TextEditor
             TextWrappingChanged -= OnTextWrappingChanged;
             SizeChanged -= OnSizeChanged;
             FontSizeChanged -= OnFontSizeChanged;
+
+            DisposeSyntaxHighlighting();
 
             UnhookExternalEvents();
 
@@ -385,6 +389,7 @@ namespace Notepads.Controls.TextEditor
         private void OnTextChanged(object sender, RoutedEventArgs _)
         {
             UpdateLineNumbersRendering();
+            ScheduleSyntaxHighlighting();
         }
 
         private void OnSelectionChanging(RichEditBox sender, RichEditBoxSelectionChangingEventArgs args)

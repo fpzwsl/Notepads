@@ -174,11 +174,36 @@ namespace Notepads.Core
         public async Task<ITextEditor> CreateTextEditorAsync(
             Guid id,
             StorageFile file,
-            Encoding encoding = null,
-            bool ignoreFileSizeLimit = false)
+            Encoding encoding = null)
         {
-            var textFile = await FileSystemUtility.ReadFileAsync(file, ignoreFileSizeLimit, encoding);
-            return CreateTextEditor(id, textFile, file, file.Name);
+            var properties = await file.GetBasicPropertiesAsync();
+            TextFile textFile;
+            if (properties.Size >= 16UL * 1024 * 1024)
+            {
+                var resolvedEncoding = await FileSystemUtility.GetEncodingForChunkedDocumentAsync(file, encoding);
+                if (ChunkedTextDocument.CanVirtualize(resolvedEncoding))
+                {
+                    var document = await ChunkedTextDocument.CreateAsync(file, resolvedEncoding);
+                    var firstChunk = await document.GetChunkAsync(0);
+                    textFile = new TextFile(string.Empty, resolvedEncoding,
+                        LineEndingUtility.GetLineEndingTypeFromText(firstChunk), properties.DateModified.ToFileTime())
+                    {
+                        ChunkedDocument = document
+                    };
+                }
+                else
+                {
+                    textFile = await FileSystemUtility.ReadFileAsync(file, encoding);
+                }
+            }
+            else
+            {
+                textFile = await FileSystemUtility.ReadFileAsync(file, encoding);
+            }
+
+            var textEditor = CreateTextEditor(id, textFile, file, file.Name);
+            await textEditor.InitializeChunkedDocumentAsync();
+            return textEditor;
         }
 
         public ITextEditor CreateTextEditor(

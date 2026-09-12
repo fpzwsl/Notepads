@@ -15,7 +15,6 @@ namespace Notepads.Utilities
     using System.Text.RegularExpressions;
     using System.Threading.Tasks;
     using UtfUnknown;
-    using Windows.ApplicationModel.Resources;
     using Windows.Storage;
     using Windows.Storage.FileProperties;
     using Windows.Storage.Provider;
@@ -38,8 +37,6 @@ namespace Notepads.Utilities
         private const Int32 ERROR_SHARING_VIOLATION = unchecked((Int32)0x80070020);
         private const Int32 ERROR_UNABLE_TO_REMOVE_REPLACED = unchecked((Int32)0x80070497);
         private const Int32 ERROR_FAIL = unchecked((Int32)0x80004005);
-
-        private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForCurrentView();
 
         private const string WslRootPath = "\\\\wsl$\\";
 
@@ -334,20 +331,15 @@ namespace Notepads.Utilities
             }
         }
 
-        public static async Task<TextFile> ReadFileAsync(string filePath, bool ignoreFileSizeLimit, Encoding encoding)
+        public static async Task<TextFile> ReadFileAsync(string filePath, Encoding encoding = null)
         {
             StorageFile file = await GetFileAsync(filePath);
-            return file == null ? null : await ReadFileAsync(file, ignoreFileSizeLimit, encoding);
+            return file == null ? null : await ReadFileAsync(file, encoding);
         }
 
-        public static async Task<TextFile> ReadFileAsync(StorageFile file, bool ignoreFileSizeLimit, Encoding encoding = null)
+        public static async Task<TextFile> ReadFileAsync(StorageFile file, Encoding encoding = null)
         {
             var fileProperties = await file.GetBasicPropertiesAsync();
-
-            if (!ignoreFileSizeLimit && fileProperties.Size > 1000 * 1024)
-            {
-                throw new Exception(ResourceLoader.GetString("ErrorMessage_NotepadsFileSizeLimit"));
-            }
 
             Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 
@@ -357,38 +349,80 @@ namespace Notepads.Utilities
             using (var inputStream = await file.OpenReadAsync())
             using (var stream = inputStream.AsStreamForRead())
             {
-                stream.Read(bom, 0, 4); // Read BOM values
+                await stream.ReadAsync(bom, 0, bom.Length); // Read BOM values
                 stream.Position = 0; // Reset stream position
 
                 var reader = CreateStreamReader(stream, bom, encoding);
 
-                string PeekAndRead()
+                async Task<string> PeekAndReadAsync()
                 {
                     if (encoding == null)
                     {
                         reader.Peek();
                         encoding = reader.CurrentEncoding;
                     }
-                    var str = reader.ReadToEnd();
+                    var str = await reader.ReadToEndAsync();
                     reader.Close();
                     return str;
                 }
 
                 try
                 {
-                    text = PeekAndRead();
+                    text = await PeekAndReadAsync();
                 }
                 catch (DecoderFallbackException)
                 {
                     stream.Position = 0; // Reset stream position
                     encoding = GetFallBackEncoding();
                     reader = new StreamReader(stream, encoding);
-                    text = PeekAndRead();
+                    text = await PeekAndReadAsync();
                 }
             }
 
             encoding = FixUtf8Bom(encoding, bom);
             return new TextFile(text, encoding, LineEndingUtility.GetLineEndingTypeFromText(text), fileProperties.DateModified.ToFileTime());
+        }
+
+        /// <summary>
+        /// Resolves an encoding without decoding the complete file. This is used before creating
+        /// a virtualized document, where only visible chunks should be loaded.
+        /// </summary>
+        public static async Task<Encoding> GetEncodingForChunkedDocumentAsync(StorageFile file, Encoding requestedEncoding = null)
+        {
+            if (requestedEncoding != null) return requestedEncoding;
+
+            Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+            var bom = new byte[4];
+            using (var inputStream = await file.OpenReadAsync())
+            using (var stream = inputStream.AsStreamForRead())
+            {
+                await stream.ReadAsync(bom, 0, bom.Length);
+                stream.Position = 0;
+
+                if (bom[0] == 0xEF && bom[1] == 0xBB && bom[2] == 0xBF) return new UTF8Encoding(true);
+                if (bom[0] == 0xFF && bom[1] == 0xFE && bom[2] == 0x00 && bom[3] == 0x00) return new UTF32Encoding(false, true);
+                if (bom[0] == 0x00 && bom[1] == 0x00 && bom[2] == 0xFE && bom[3] == 0xFF) return new UTF32Encoding(true, true);
+                if (bom[0] == 0xFF && bom[1] == 0xFE) return Encoding.Unicode;
+                if (bom[0] == 0xFE && bom[1] == 0xFF) return Encoding.BigEndianUnicode;
+
+                if (AppSettingsService.EditorDefaultDecoding != null)
+                {
+                    return AppSettingsService.EditorDefaultDecoding;
+                }
+
+                // Charset detection only needs a bounded sample and must not scan a multi-GB file.
+                var sample = new byte[256 * 1024];
+                var sampleLength = await stream.ReadAsync(sample, 0, sample.Length);
+                using (var sampleStream = new MemoryStream(sample, 0, sampleLength, writable: false))
+                {
+                    if (TryGuessEncoding(sampleStream, out var detectedEncoding) && ChunkedTextDocument.CanVirtualize(detectedEncoding))
+                    {
+                        return detectedEncoding;
+                    }
+                }
+            }
+
+            return new UTF8Encoding(false, true);
         }
 
         private static Encoding GetFallBackEncoding()

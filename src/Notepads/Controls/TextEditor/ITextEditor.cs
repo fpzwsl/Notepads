@@ -55,6 +55,8 @@ namespace Notepads.Controls.TextEditor
 
         bool IsModified { get; }
 
+        bool IsChunkedDocument { get; }
+
         FileModificationState FileModificationState { get; }
 
         TextEditorMode Mode { get; }
@@ -69,6 +71,8 @@ namespace Notepads.Controls.TextEditor
             bool clearUndoQueue = true,
             bool isModified = false,
             bool resetText = true);
+
+        Task InitializeChunkedDocumentAsync();
 
         Task RenameAsync(string newFileName);
 

@@ -99,6 +99,8 @@
                 FileType = FileTypeUtility.GetFileTypeByFileName(EditingFile.Name);
             }
 
+            TextEditorCore?.SetSyntaxLanguage(FileTypeUtility.GetFileExtension(EditingFileName ?? FileNamePlaceholder));
+
             // Hide content preview if current file type is not supported for previewing
             if (!FileTypeUtility.IsPreviewSupported(FileType))
             {
@@ -161,6 +163,10 @@
 
         private SearchContext _lastSearchContext = new SearchContext(string.Empty);
 
+        private ChunkedTextDocument _chunkedDocument;
+
+        public bool IsChunkedDocument => _chunkedDocument != null;
+
         public TextEditorMode Mode
         {
             get => _mode;
@@ -207,6 +213,9 @@
             base.KeyDown += TextEditor_KeyDown;
 
             TextEditorCore.FontZoomFactorChanged += TextEditorCore_OnFontZoomFactorChanged;
+            ChunkedTextEditorView.TextChanging += ChunkedTextEditorView_OnTextChanging;
+            ChunkedTextEditorView.SelectionChanged += ChunkedTextEditorView_OnSelectionChanged;
+            ChunkedTextEditorView.KeyDown += TextEditorCore_OnKeyDown;
         }
 
         private void TextEditor_KeyDown(object sender, KeyRoutedEventArgs e)
@@ -239,6 +248,11 @@
             base.KeyDown -= TextEditor_KeyDown;
 
             TextEditorCore.FontZoomFactorChanged -= TextEditorCore_OnFontZoomFactorChanged;
+            ChunkedTextEditorView.TextChanging -= ChunkedTextEditorView_OnTextChanging;
+            ChunkedTextEditorView.SelectionChanged -= ChunkedTextEditorView_OnSelectionChanged;
+            ChunkedTextEditorView.KeyDown -= TextEditorCore_OnKeyDown;
+            ChunkedTextEditorView.Dispose();
+            _chunkedDocument?.Dispose();
 
             _contentPreviewExtension?.Dispose();
 
@@ -309,6 +323,7 @@
 
         public string GetText()
         {
+            if (IsChunkedDocument) return string.Empty;
             return TextEditorCore.GetText();
         }
 
@@ -470,9 +485,29 @@
         public void Init(TextFile textFile, StorageFile file, bool resetLastSavedSnapshot = true, bool clearUndoQueue = true, bool isModified = false, bool resetText = true)
         {
             _loaded = false;
+            if (_chunkedDocument != null && !ReferenceEquals(_chunkedDocument, textFile.ChunkedDocument))
+            {
+                _chunkedDocument.Dispose();
+            }
+            _chunkedDocument = textFile.ChunkedDocument;
             EditingFile = file;
             RequestedEncoding = null;
             RequestedLineEnding = null;
+            if (IsChunkedDocument)
+            {
+                TextEditorCore.Visibility = Visibility.Collapsed;
+                ChunkedTextEditorView.Visibility = Visibility.Visible;
+                if (resetLastSavedSnapshot)
+                {
+                    LastSavedSnapshot = textFile;
+                }
+                IsModified = isModified;
+                _loaded = true;
+                return;
+            }
+
+            TextEditorCore.Visibility = Visibility.Visible;
+            ChunkedTextEditorView.Visibility = Visibility.Collapsed;
             if (resetText)
             {
                 TextEditorCore.SetText(textFile.Content);
@@ -490,11 +525,36 @@
             _loaded = true;
         }
 
+        public async Task InitializeChunkedDocumentAsync()
+        {
+            if (IsChunkedDocument)
+            {
+                await ChunkedTextEditorView.InitializeAsync(_chunkedDocument);
+            }
+        }
+
         public async Task ReloadFromEditingFileAsync(Encoding encoding = null)
         {
             if (EditingFile != null)
             {
-                var textFile = await FileSystemUtility.ReadFileAsync(EditingFile, ignoreFileSizeLimit: false, encoding: encoding);
+                if (IsChunkedDocument)
+                {
+                    var resolvedEncoding = await FileSystemUtility.GetEncodingForChunkedDocumentAsync(EditingFile, encoding);
+                    var document = await ChunkedTextDocument.CreateAsync(EditingFile, resolvedEncoding);
+                    var firstChunk = await document.GetChunkAsync(0);
+                    var properties = await EditingFile.GetBasicPropertiesAsync();
+                    var textFile = new TextFile(string.Empty, resolvedEncoding,
+                        LineEndingUtility.GetLineEndingTypeFromText(firstChunk), properties.DateModified.ToFileTime())
+                    {
+                        ChunkedDocument = document
+                    };
+                    Init(textFile, EditingFile, clearUndoQueue: false);
+                    await InitializeChunkedDocumentAsync();
+                    FileReloaded?.Invoke(this, EventArgs.Empty);
+                    return;
+                }
+
+                var textFile = await FileSystemUtility.ReadFileAsync(EditingFile, encoding);
                 Init(textFile, EditingFile, clearUndoQueue: false);
                 LineEndingChanged?.Invoke(this, EventArgs.Empty);
                 EncodingChanged?.Invoke(this, EventArgs.Empty);
@@ -538,6 +598,7 @@
 
         public bool TryChangeEncoding(Encoding encoding)
         {
+            if (IsChunkedDocument) return false;
             if (encoding == null) return false;
 
             if (!EncodingUtility.Equals(LastSavedSnapshot.Encoding, encoding))
@@ -560,6 +621,7 @@
 
         public bool TryChangeLineEnding(LineEnding lineEnding)
         {
+            if (IsChunkedDocument) return false;
             if (LastSavedSnapshot.LineEnding != lineEnding)
             {
                 RequestedLineEnding = lineEnding;
@@ -612,6 +674,7 @@
 
         public void ShowHideContentPreview()
         {
+            if (IsChunkedDocument) return;
             if (_contentPreviewExtension == null)
             {
                 _contentPreviewExtension = ExtensionProvider?.GetContentPreviewExtension(FileType);
@@ -635,6 +698,7 @@
 
         public void OpenSideBySideDiffViewer()
         {
+            if (IsChunkedDocument) return;
             if (string.Equals(LastSavedSnapshot.Content, TextEditorCore.GetText())) return;
             if (Mode == TextEditorMode.DiffPreview) return;
             if (SideBySideDiffViewer == null) LoadSideBySideDiffViewer();
@@ -683,6 +747,12 @@
             out int selected,
             out int lineCount)
         {
+            if (IsChunkedDocument)
+            {
+                startLine = endLine = startColumn = endColumn = 1;
+                selected = lineCount = 0;
+                return;
+            }
             TextEditorCore.GetLineColumnSelection(
                 out startLine,
                 out endLine,
@@ -705,21 +775,39 @@
 
         public bool IsEditorEnabled()
         {
-            return TextEditorCore.IsEnabled;
+            return IsChunkedDocument || TextEditorCore.IsEnabled;
         }
 
         public async Task SaveContentToFileAndUpdateEditorStateAsync(StorageFile file)
         {
             if (Mode == TextEditorMode.DiffPreview) CloseSideBySideDiffViewer();
+            var wasChunked = IsChunkedDocument;
             TextFile textFile = await SaveContentToFileAsync(file); // Will throw if not succeeded
+            if (wasChunked)
+            {
+                file = await StorageFile.GetFileFromPathAsync(file.Path);
+            }
             FileModificationState = FileModificationState.Untouched;
             Init(textFile, file, clearUndoQueue: false, resetText: false);
+            if (wasChunked) await InitializeChunkedDocumentAsync();
             FileSaved?.Invoke(this, EventArgs.Empty);
             StartCheckingFileStatusPeriodically();
         }
 
         private async Task<TextFile> SaveContentToFileAsync(StorageFile file)
         {
+            if (IsChunkedDocument)
+            {
+                await SaveChunkedDocumentAsync(file);
+                var encoding = RequestedEncoding ?? _chunkedDocument.Encoding;
+                var savedFile = await StorageFile.GetFileFromPathAsync(file.Path);
+                var modifiedTime = await FileSystemUtility.GetDateModifiedAsync(savedFile);
+                return new TextFile(string.Empty, encoding, LastSavedSnapshot.LineEnding, modifiedTime)
+                {
+                    ChunkedDocument = await ChunkedTextDocument.CreateAsync(savedFile, encoding)
+                };
+            }
+
             var text = TextEditorCore.GetText();
             var encoding = RequestedEncoding ?? LastSavedSnapshot.Encoding;
             var lineEnding = RequestedLineEnding ?? LastSavedSnapshot.LineEnding;
@@ -728,8 +816,32 @@
             return new TextFile(text, encoding, lineEnding, newFileModifiedTime);
         }
 
+        private async Task SaveChunkedDocumentAsync(StorageFile file)
+        {
+            if (!string.Equals(_chunkedDocument.SourceFile.Path, file.Path, StringComparison.OrdinalIgnoreCase))
+            {
+                await _chunkedDocument.SaveAsAsync(file);
+                return;
+            }
+
+            var folderPath = System.IO.Path.GetDirectoryName(file.Path);
+            var folder = await StorageFolder.GetFolderFromPathAsync(folderPath);
+            var temporaryFile = await folder.CreateFileAsync($".{file.Name}.{Guid.NewGuid():N}.tmp", CreationCollisionOption.FailIfExists);
+            try
+            {
+                await _chunkedDocument.SaveAsAsync(temporaryFile);
+                await temporaryFile.MoveAndReplaceAsync(file);
+            }
+            catch
+            {
+                try { await temporaryFile.DeleteAsync(); } catch { }
+                throw;
+            }
+        }
+
         public string GetContentForSharing()
         {
+            if (IsChunkedDocument) return string.Empty;
             return TextEditorCore.Document.Selection.StartPosition == TextEditorCore.Document.Selection.EndPosition ?
                 TextEditorCore.GetText() :
                 TextEditorCore.Document.Selection.Text;
@@ -737,6 +849,11 @@
 
         public void TypeText(string text)
         {
+            if (IsChunkedDocument)
+            {
+                ChunkedTextEditorView.TypeText(text);
+                return;
+            }
             if (TextEditorCore.IsEnabled)
             {
                 TextEditorCore.Document.Selection.TypeText(text);
@@ -751,7 +868,14 @@
             }
             else if (Mode == TextEditorMode.Editing)
             {
-                TextEditorCore.ResetFocusAndScrollToPreviousPosition();
+                if (IsChunkedDocument)
+                {
+                    ChunkedTextEditorView.FocusEditor();
+                }
+                else
+                {
+                    TextEditorCore.ResetFocusAndScrollToPreviousPosition();
+                }
             }
         }
 
@@ -821,6 +945,12 @@
         public bool NoChangesSinceLastSaved(bool compareTextOnly = false)
         {
             if (!_loaded) return true;
+
+            if (IsChunkedDocument)
+            {
+                return !_chunkedDocument.HasUnsavedChanges &&
+                       (compareTextOnly || (RequestedLineEnding == null && RequestedEncoding == null));
+            }
 
             if (!compareTextOnly)
             {
@@ -892,6 +1022,18 @@
             SelectionChanged?.Invoke(this, EventArgs.Empty);
         }
 
+        private void ChunkedTextEditorView_OnSelectionChanged(object sender, EventArgs e)
+        {
+            SelectionChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void ChunkedTextEditorView_OnTextChanging(object sender, EventArgs e)
+        {
+            if (!_loaded) return;
+            IsModified = true;
+            TextChanging?.Invoke(this, EventArgs.Empty);
+        }
+
         private void TextEditorCore_OnFontZoomFactorChanged(object sender, double e)
         {
             FontZoomFactorChanged?.Invoke(this, EventArgs.Empty);
@@ -950,6 +1092,7 @@
 
         public void ShowFindAndReplaceControl(bool showReplaceBar)
         {
+            if (IsChunkedDocument) return;
             if (!TextEditorCore.IsEnabled || Mode != TextEditorMode.Editing)
             {
                 return;
@@ -1069,6 +1212,7 @@
 
         public void ShowGoToControl()
         {
+            if (IsChunkedDocument) return;
             if (!TextEditorCore.IsEnabled || Mode != TextEditorMode.Editing) return;
 
             FindAndReplacePlaceholder?.Dismiss();
