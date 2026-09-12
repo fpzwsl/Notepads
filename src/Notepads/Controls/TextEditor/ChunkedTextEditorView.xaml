@@ -1,0 +1,26 @@
+<UserControl
+    x:Class="Notepads.Controls.TextEditor.ChunkedTextEditorView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="Transparent">
+    <ListView x:Name="ChunkList"
+              IsItemClickEnabled="False"
+              SelectionMode="None"
+              ShowsScrollingPlaceholders="True"
+              ContainerContentChanging="ChunkList_ContainerContentChanging">
+        <ListView.ItemTemplate>
+            <DataTemplate>
+                <TextBox Text="{Binding Text, Mode=OneWay}"
+                         AcceptsReturn="True"
+                         TextWrapping="NoWrap"
+                         BorderThickness="0"
+                         Padding="6,6,10,6"
+                         FontFamily="{ThemeResource ContentControlThemeFontFamily}"
+                         FontSize="{ThemeResource ControlContentThemeFontSize}"
+                         TextChanged="ChunkTextBox_TextChanged"
+                         KeyDown="ChunkTextBox_KeyDown"
+                         GotFocus="ChunkTextBox_GotFocus"/>
+            </DataTemplate>
+        </ListView.ItemTemplate>
+    </ListView>
+</UserControl>

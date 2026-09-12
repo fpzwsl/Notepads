@@ -39,8 +39,7 @@ namespace Notepads.Core
         Task<ITextEditor> CreateTextEditorAsync(
             Guid id,
             StorageFile file,
-            Encoding encoding = null,
-            bool ignoreFileSizeLimit = false);
+            Encoding encoding = null);
 
         ITextEditor CreateTextEditor(
             Guid id,

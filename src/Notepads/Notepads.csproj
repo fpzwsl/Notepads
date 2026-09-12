@@ -173,6 +173,7 @@
     <Compile Include="Controls\TextEditor\TextEditorCore.JoinText.cs" />
     <Compile Include="Controls\TextEditor\TextEditorCore.ExternalEventListener.cs" />
     <Compile Include="Controls\TextEditor\TextEditorCore.LineHighlighter.cs" />
+    <Compile Include="Controls\TextEditor\TextEditorCore.SyntaxHighlighting.cs" />
     <Compile Include="Controls\TextEditor\TextEditorCore.LineNumbers.cs" />
     <Compile Include="Controls\TextEditor\TextEditorCore.MoveText.cs" />
     <Compile Include="Extensions\DispatcherExtensions.cs" />
@@ -201,6 +202,9 @@
     <Compile Include="Controls\TextEditor\ITextEditor.cs" />
     <Compile Include="Controls\TextEditor\TextEditor.xaml.cs">
       <DependentUpon>TextEditor.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Controls\TextEditor\ChunkedTextEditorView.xaml.cs">
+      <DependentUpon>ChunkedTextEditorView.xaml</DependentUpon>
     </Compile>
     <Compile Include="Controls\TextEditor\TextEditorCore.cs" />
     <Compile Include="Controls\TextEditor\TextEditorContextFlyout.cs" />
@@ -254,6 +258,7 @@
     <Compile Include="Settings\ApplicationSettings.cs" />
     <Compile Include="Settings\SettingsKey.cs" />
     <Compile Include="Utilities\FileSystemUtility.cs" />
+    <Compile Include="Utilities\ChunkedTextDocument.cs" />
     <Compile Include="Utilities\FontUtility.cs" />
     <Compile Include="Utilities\EncodingUtility.cs" />
     <Compile Include="Brushes\HostBackdropAcrylicBrush.cs" />
@@ -346,6 +351,10 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Controls\TextEditor\TextEditor.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Controls\TextEditor\ChunkedTextEditorView.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

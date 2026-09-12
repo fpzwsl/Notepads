@@ -55,7 +55,7 @@ So here comes the “Notepads” 🎉 (s stands for Sets).
 
 * You won't be able to save files to system folders due to UWP restriction (windows, system32, etc.).
 * You cannot associate potentially harmful file types (.cmd, .bat etc.) with Notepads.
-* Notepads does not work well with large files; the file size limit is set to 1MB for now. I will add large file support later.
+* Files of 16 MiB and above use a bounded-memory, virtualized chunk editor for supported single-byte and UTF encodings. Full-document features such as Markdown preview, diff view, and find/replace are unavailable in this mode.
 
 ## Downloads:
 

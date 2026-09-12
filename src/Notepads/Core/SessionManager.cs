@@ -316,6 +316,14 @@ namespace Notepads.Core
                 textEditorData.EditingFilePath = textEditor.EditingFilePath;
             }
 
+            // Virtualized documents do not have a complete in-memory snapshot. Persist their
+            // file reference and editor state, but never write an empty text backup over it.
+            if (textEditor.IsChunkedDocument)
+            {
+                textEditorData.StateMetaData = textEditor.GetTextEditorStateMetaData();
+                return textEditorData;
+            }
+
             if (textEditor.IsModified)
             {
                 if (textEditor.EditingFile != null)
@@ -455,7 +463,7 @@ namespace Notepads.Core
             else if (editingFile != null && lastSavedFile == null && pendingFile == null) // File without pending changes
             {
                 var encoding = EncodingUtility.GetEncodingByName(editorSessionData.StateMetaData.LastSavedEncoding);
-                textEditor = await _notepadsCore.CreateTextEditorAsync(editorSessionData.Id, editingFile, encoding: encoding, ignoreFileSizeLimit: true);
+                textEditor = await _notepadsCore.CreateTextEditorAsync(editorSessionData.Id, editingFile, encoding: encoding);
                 textEditor.ResetEditorState(editorSessionData.StateMetaData);
             }
             else // File with pending changes
@@ -465,7 +473,7 @@ namespace Notepads.Core
 
                 if (lastSavedFile != null)
                 {
-                    TextFile lastSavedTextFile = await FileSystemUtility.ReadFileAsync(lastSavedFile, ignoreFileSizeLimit: true,
+                    TextFile lastSavedTextFile = await FileSystemUtility.ReadFileAsync(lastSavedFile,
                     EncodingUtility.GetEncodingByName(editorSessionData.StateMetaData.LastSavedEncoding));
                     lastSavedText = lastSavedTextFile.Content;
                 }
@@ -485,7 +493,6 @@ namespace Notepads.Core
                 if (pendingFile != null)
                 {
                     TextFile pendingTextFile = await FileSystemUtility.ReadFileAsync(pendingFile,
-                        ignoreFileSizeLimit: true,
                         EncodingUtility.GetEncodingByName(editorSessionData.StateMetaData.LastSavedEncoding));
                     pendingText = pendingTextFile.Content;
                 }

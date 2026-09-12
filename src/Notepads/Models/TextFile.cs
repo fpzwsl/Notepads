@@ -25,5 +25,9 @@ namespace Notepads.Models
         public LineEnding LineEnding { get; set; }
 
         public long DateModifiedFileTime { get; set; }
+
+        public ChunkedTextDocument ChunkedDocument { get; set; }
+
+        public bool IsChunked => ChunkedDocument != null;
     }
 }
