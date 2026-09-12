@@ -150,6 +150,7 @@ namespace Notepads.Controls.TextEditor
             SizeChanged += OnSizeChanged;
             FontSizeChanged += OnFontSizeChanged;
 
+            InitializeLineNumberUpdates();
             InitializeSyntaxHighlighting();
 
             // Init shortcuts
@@ -200,6 +201,7 @@ namespace Notepads.Controls.TextEditor
             TextChanging -= OnTextChanging;
             TextChanged -= OnTextChanged;
             SelectionChanging -= OnSelectionChanging;
+            DisposeLineNumberUpdates();
             PointerWheelChanged -= OnPointerWheelChanged;
             LostFocus -= OnLostFocus;
             Loaded -= OnLoaded;
@@ -388,7 +390,7 @@ namespace Notepads.Controls.TextEditor
 
         private void OnTextChanged(object sender, RoutedEventArgs _)
         {
-            UpdateLineNumbersRendering();
+            ScheduleLineNumbersRendering();
             ScheduleSyntaxHighlighting();
         }
 

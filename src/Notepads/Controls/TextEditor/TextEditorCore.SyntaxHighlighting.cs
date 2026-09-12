@@ -21,17 +21,18 @@ namespace Notepads.Controls.TextEditor
         };
 
         private static readonly Regex SyntaxTokenRegex = new Regex(
-            @"(?<comment>//[^\r\n]*|/\*[\s\S]*?\*/|#[^\r\n]*|<!--[\s\S]*?-->)|(?<string>""(?:\\.|[^""\\])*""|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(?<number>\b(?:0x[0-9a-fA-F]+|\d+(?:\.\d+)?)\b)|(?<keyword>\b(?:abstract|as|async|await|break|case|catch|class|const|continue|def|delete|do|else|enum|export|extends|false|finally|for|from|function|get|if|implements|import|in|interface|is|let|lock|namespace|new|null|of|override|package|private|protected|public|readonly|return|sealed|set|static|struct|switch|this|throw|throws|true|try|typeof|using|var|virtual|void|while|with|yield|SELECT|FROM|WHERE|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|AND|OR|NOT|NULL)\b)|(?<type>\b(?:bool|boolean|byte|char|decimal|double|dynamic|float|int|long|object|sbyte|short|string|uint|ulong|ushort|void|var|List|Dictionary|Task|String|Integer|Number|Boolean)\b)",
+            @"(?<comment>//[^\r\n]*|/\*[\s\S]*?\*/|#[^\r\n]*|<!--[\s\S]*?-->)|(?<string>""(?:\\.|[^""\\])*""|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(?<number>\b(?:0[xX][0-9a-fA-F](?:_?[0-9a-fA-F])*|0[bB][01](?:_?[01])*|\d(?:_?\d)*(?:\.\d(?:_?\d)*)?(?:[eE][+-]?\d(?:_?\d)*)?)(?:[fFdDmMlLuU]+)?\b)|(?<keyword>\b(?:abstract|as|async|await|break|case|catch|class|const|continue|def|delete|do|else|enum|export|extends|false|finally|for|from|function|get|if|implements|import|in|interface|is|let|lock|namespace|new|null|of|override|package|private|protected|public|readonly|return|sealed|set|static|struct|switch|this|throw|throws|true|try|typeof|using|var|virtual|void|while|with|yield|SELECT|FROM|WHERE|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|AND|OR|NOT|NULL)\b)|(?<type>\b(?:bool|boolean|byte|char|decimal|double|dynamic|float|int|long|object|sbyte|short|string|uint|ulong|ushort|void|var|List|Dictionary|Task|String|Integer|Number|Boolean)\b)",
             RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
         private DispatcherTimer _syntaxHighlightTimer;
         private string _syntaxLanguage = string.Empty;
         private bool _syntaxHighlightingApplied;
         private bool _isApplyingSyntaxHighlighting;
+        private string _lastHighlightedText;
 
         internal void InitializeSyntaxHighlighting()
         {
-            _syntaxHighlightTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(180) };
+            _syntaxHighlightTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
             _syntaxHighlightTimer.Tick += SyntaxHighlightTimer_Tick;
             Notepads.Services.ThemeSettingsService.OnThemeChanged += SyntaxThemeChanged;
         }
@@ -83,6 +84,7 @@ namespace Notepads.Controls.TextEditor
 
             var hasSyntax = SyntaxHighlightExtensions.Contains(_syntaxLanguage);
             if (!hasSyntax && !_syntaxHighlightingApplied) return;
+            if (hasSyntax && _syntaxHighlightingApplied && string.Equals(text, _lastHighlightedText, StringComparison.Ordinal)) return;
 
             _isApplyingSyntaxHighlighting = true;
             try
@@ -106,6 +108,7 @@ namespace Notepads.Controls.TextEditor
 
                 Document.Selection.SetRange(Math.Min(selectionStart, text.Length), Math.Min(selectionEnd, text.Length));
                 _syntaxHighlightingApplied = hasSyntax;
+                _lastHighlightedText = hasSyntax ? text : null;
             }
             catch (Exception ex)
             {

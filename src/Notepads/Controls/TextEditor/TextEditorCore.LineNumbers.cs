@@ -44,6 +44,38 @@ namespace Notepads.Controls.TextEditor
         private readonly Dictionary<string, double> _minRequisiteIntegerTextRenderingWidthCache = new Dictionary<string, double>();
         private readonly SolidColorBrush _lineNumberDarkModeForegroundBrush = new SolidColorBrush("#99EEEEEE".ToColor());
         private readonly SolidColorBrush _lineNumberLightModeForegroundBrush = new SolidColorBrush("#99000000".ToColor());
+        private DispatcherTimer _lineNumberUpdateTimer;
+        private bool _lineNumberUpdatePending;
+
+        private void InitializeLineNumberUpdates()
+        {
+            _lineNumberUpdateTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(60) };
+            _lineNumberUpdateTimer.Tick += LineNumberUpdateTimer_Tick;
+        }
+
+        private void DisposeLineNumberUpdates()
+        {
+            if (_lineNumberUpdateTimer == null) return;
+            _lineNumberUpdateTimer.Stop();
+            _lineNumberUpdateTimer.Tick -= LineNumberUpdateTimer_Tick;
+            _lineNumberUpdateTimer = null;
+        }
+
+        private void ScheduleLineNumbersRendering()
+        {
+            if (_lineNumberUpdateTimer == null || !_loaded || !DisplayLineNumbers) return;
+            _lineNumberUpdatePending = true;
+            _lineNumberUpdateTimer.Stop();
+            _lineNumberUpdateTimer.Start();
+        }
+
+        private void LineNumberUpdateTimer_Tick(object sender, object e)
+        {
+            _lineNumberUpdateTimer.Stop();
+            if (!_lineNumberUpdatePending) return;
+            _lineNumberUpdatePending = false;
+            UpdateLineNumbersRendering();
+        }
 
         private void ShowLineNumbers()
         {
