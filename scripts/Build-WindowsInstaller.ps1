@@ -85,12 +85,19 @@ $publisher = 'CN=40E66D07-5A3A-4954-9CA3-A1EB15ED0804'
 
 if (-not $NoSign) {
     $codeSigningOid = '1.3.6.1.5.5.7.3.3'
+    $basicConstraintsOid = '2.5.29.19'
     $certificate = Get-ChildItem Cert:\CurrentUser\My |
-        Where-Object { $_.Subject -eq $publisher -and $_.HasPrivateKey -and $codeSigningOid -in $_.EnhancedKeyUsageList.ObjectId } |
+        Where-Object {
+            $basicConstraints = $_.Extensions | Where-Object { $_.Oid.Value -eq $basicConstraintsOid }
+            $_.Subject -eq $publisher -and $_.HasPrivateKey -and
+            $codeSigningOid -in $_.EnhancedKeyUsageList.ObjectId -and
+            $basicConstraints -and -not $basicConstraints.CertificateAuthority
+        } |
         Select-Object -First 1
     if (-not $certificate) {
         $certificate = New-SelfSignedCertificate -Type Custom -Subject $publisher -KeyUsage DigitalSignature `
-            -TextExtension "2.5.29.37={text}$codeSigningOid" -KeyExportPolicy Exportable `
+            -TextExtension @("2.5.29.19={text}CA=false", "2.5.29.37={text}$codeSigningOid") `
+            -KeyExportPolicy Exportable `
             -KeyAlgorithm RSA -KeyLength 2048 -KeySpec Signature -HashAlgorithm SHA256 `
             -FriendlyName 'Notepads Development Package Certificate' -CertStoreLocation Cert:\CurrentUser\My
     }
