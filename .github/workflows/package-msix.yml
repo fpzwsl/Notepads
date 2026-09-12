@@ -1,0 +1,54 @@
+name: Package MSIX
+
+on:
+  workflow_dispatch:
+    inputs:
+      configuration:
+        description: Build configuration
+        required: true
+        default: Production
+        type: choice
+        options:
+          - Production
+          - Release
+          - Debug
+      platform:
+        description: Target architecture
+        required: true
+        default: x64
+        type: choice
+        options:
+          - x64
+          - x86
+          - ARM64
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Build ${{ inputs.configuration }} (${{ inputs.platform }})
+    runs-on: windows-2022
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Build signed MSIX bundle
+        shell: pwsh
+        run: |
+          .\scripts\Build-WindowsInstaller.ps1 `
+            -Configuration '${{ inputs.configuration }}' `
+            -Platform '${{ inputs.platform }}'
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Notepads-${{ inputs.configuration }}-${{ inputs.platform }}-MSIX
+          path: |
+            Artifacts/**/*.msixbundle
+            Artifacts/**/*.cer
+            Artifacts/**/Add-AppDevPackage.ps1
+            Artifacts/**/Dependencies/**
+          if-no-files-found: error
+          retention-days: 14
