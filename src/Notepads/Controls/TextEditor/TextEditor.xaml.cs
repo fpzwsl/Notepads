@@ -543,12 +543,12 @@
                     var document = await ChunkedTextDocument.CreateAsync(EditingFile, resolvedEncoding);
                     var firstChunk = await document.GetChunkAsync(0);
                     var properties = await EditingFile.GetBasicPropertiesAsync();
-                    var textFile = new TextFile(string.Empty, resolvedEncoding,
+                    var chunkedTextFile = new TextFile(string.Empty, resolvedEncoding,
                         LineEndingUtility.GetLineEndingTypeFromText(firstChunk), properties.DateModified.ToFileTime())
                     {
                         ChunkedDocument = document
                     };
-                    Init(textFile, EditingFile, clearUndoQueue: false);
+                    Init(chunkedTextFile, EditingFile, clearUndoQueue: false);
                     await InitializeChunkedDocumentAsync();
                     FileReloaded?.Invoke(this, EventArgs.Empty);
                     return;
@@ -799,12 +799,12 @@
             if (IsChunkedDocument)
             {
                 await SaveChunkedDocumentAsync(file);
-                var encoding = RequestedEncoding ?? _chunkedDocument.Encoding;
+                var chunkedEncoding = RequestedEncoding ?? _chunkedDocument.Encoding;
                 var savedFile = await StorageFile.GetFileFromPathAsync(file.Path);
                 var modifiedTime = await FileSystemUtility.GetDateModifiedAsync(savedFile);
-                return new TextFile(string.Empty, encoding, LastSavedSnapshot.LineEnding, modifiedTime)
+                return new TextFile(string.Empty, chunkedEncoding, LastSavedSnapshot.LineEnding, modifiedTime)
                 {
-                    ChunkedDocument = await ChunkedTextDocument.CreateAsync(savedFile, encoding)
+                    ChunkedDocument = await ChunkedTextDocument.CreateAsync(savedFile, chunkedEncoding)
                 };
             }
 

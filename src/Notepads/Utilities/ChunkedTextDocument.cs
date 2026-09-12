@@ -92,7 +92,7 @@ namespace Notepads.Utilities
             if (chunkSize <= 0) throw new ArgumentOutOfRangeException(nameof(chunkSize));
             if (cacheCapacity <= 0) throw new ArgumentOutOfRangeException(nameof(cacheCapacity));
 
-            var properties = await sourceFile.GetBasicPropertiesAsync().ConfigureAwait(false);
+            var properties = await sourceFile.GetBasicPropertiesAsync();
             var chunks = await BuildChunkIndexAsync(sourceFile, encoding, chunkSize).ConfigureAwait(false);
             var hasByteOrderMark = await HasByteOrderMarkAsync(sourceFile, encoding).ConfigureAwait(false);
 
